@@ -1,0 +1,19 @@
+version: "0.1"
+
+service:
+  name: payments-api
+  owner: payments-team
+  layer: domain
+  tier: critical
+
+exposure:
+  public: false
+
+dependencies:
+  - name: orders-api
+    layer: domain
+    required: true
+
+availability:
+  replicas: 2
+  requires_health_checks: true
