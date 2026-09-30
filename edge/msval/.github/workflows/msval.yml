@@ -1,0 +1,74 @@
+# msval CI example (MVP-1).
+#
+# Renders Kubernetes manifests, validates them with msval against the
+# repository-pinned policy, and fails the job when blocking findings
+# exist (msval exits 1). The JSON report is uploaded as a workflow
+# artifact for machine-readable downstream use.
+#
+# Copy this file into the repository that renders your manifests:
+#
+#   .github/workflows/msval.yml
+
+name: msval
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pin the Python version (Phase H).
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install msval (pinned dependency versions)
+        run: |
+          python -m pip install --upgrade "pip==26.1.2"
+          pip install -r edge/msval/requirements/ci-requirements.txt
+          pip install ./edge/msval
+
+      - name: Verify policy artifact integrity
+        run: python -m pytest -q edge/msval/tests/test_policy_catalog.py
+
+      # Render manifests for real here. The example renders a static
+      # multi-document manifest from the msval examples.
+      - name: Render Kubernetes manifests
+        run: |
+          mkdir -p rendered
+          cp edge/msval/examples/kubernetes/multi-doc.yaml rendered/manifests.yaml
+
+      - name: Validate with msval
+        run: |
+          msval validate \
+            --architecture edge/msval/examples/service.arch.yaml \
+            --kubernetes rendered/manifests.yaml \
+            --format json > msval-report.json \
+          || echo "msval found blocking findings (exit $?)" >&2
+
+          # Fail the job when blocking findings exist:
+          msval validate \
+            --architecture edge/msval/examples/service.arch.yaml \
+            --kubernetes rendered/manifests.yaml \
+            --format human
+
+      - name: Upload SARIF report
+        if: always()
+        run: |
+          msval validate \
+            --architecture edge/msval/examples/service.arch.yaml \
+            --kubernetes rendered/manifests.yaml \
+            --format sarif > msval-report.sarif || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: msval-report
+          path: |
+            msval-report.json
+            msval-report.sarif

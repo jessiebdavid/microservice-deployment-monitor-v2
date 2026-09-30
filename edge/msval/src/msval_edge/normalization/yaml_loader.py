@@ -8,7 +8,7 @@ class YamlLoadError(Exception):
     """Raised when a YAML document cannot be loaded."""
 
 
-def load_yaml_file(path: str | Path) -> Any:
+def load_yaml_file(path: str | Path) -> list[Any]:
     file_path = Path(path)
 
     if not file_path.exists():
@@ -19,8 +19,15 @@ def load_yaml_file(path: str | Path) -> Any:
 
     try:
         with file_path.open("r", encoding="utf-8") as file:
-            return yaml.safe_load(file)
+            documents = list(yaml.safe_load_all(file))
+
     except yaml.YAMLError as exc:
         raise YamlLoadError(
             f"Invalid YAML in {file_path}: {exc}"
         ) from exc
+
+    return [
+        document
+        for document in documents
+        if document is not None
+    ]

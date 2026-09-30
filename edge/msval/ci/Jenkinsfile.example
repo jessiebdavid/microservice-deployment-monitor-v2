@@ -1,0 +1,92 @@
+// msval CI example (MVP-1).
+//
+// Declarative Jenkins pipeline that renders Kubernetes manifests,
+// validates them with msval against the repository-pinned policy, and
+// fails the build when blocking findings exist (msval exits 1).
+//
+// Copy into the repository that renders your manifests and adapt the
+// agent/checkout steps to your infrastructure.
+
+pipeline {
+    agent any
+
+    environment {
+        // Pinned Python version (Phase H).
+        PYTHON_VERSION = '3.12'
+        VENV = 'msval-venv'
+    }
+
+    stages {
+        stage('Setup') {
+            steps {
+                sh """
+                    python3 --version
+                    python3 -m venv ${VENV}
+                    ./${VENV}/bin/pip install --upgrade "pip==26.1.2"
+                    ./${VENV}/bin/pip install \\
+                        "PyYAML==6.0.3" \\
+                        "jsonschema==4.26.0" \\
+                        ./edge/msval
+                """
+            }
+        }
+
+        stage('Policy integrity') {
+            steps {
+                sh "./${VENV}/bin/python -m pytest -q edge/msval/tests/test_policy_catalog.py"
+            }
+        }
+
+        stage('Render manifests') {
+            steps {
+                // Render manifests for real here. The example copies a
+                // static multi-document manifest from the msval examples.
+                sh '''
+                    mkdir -p rendered
+                    cp edge/msval/examples/kubernetes/multi-doc.yaml rendered/manifests.yaml
+                '''
+            }
+        }
+
+        stage('Validate') {
+            steps {
+                // Machine-readable report first; msval exit code 1 means
+                // blocking findings and fails the stage.
+                sh '''
+                    set +e
+                    ./${VENV}/bin/msval validate \
+                        --architecture edge/msval/examples/service.arch.yaml \
+                        --kubernetes rendered/manifests.yaml \
+                        --format json > msval-report.json
+                    status=$?
+                    set -e
+                    if [ $status -ne 0 ] && [ $status -ne 1 ]; then
+                        echo "msval failed with input error (exit $status)" >&2
+                        exit $status
+                    fi
+                    ./${VENV}/bin/msval validate \
+                        --architecture edge/msval/examples/service.arch.yaml \
+                        --kubernetes rendered/manifests.yaml \
+                        --format human
+                    if [ $status -eq 1 ]; then
+                        echo "Blocking findings: failing the build" >&2
+                        exit 1
+                    fi
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            sh '''
+                set +e
+                ./${VENV}/bin/msval validate \
+                    --architecture edge/msval/examples/service.arch.yaml \
+                    --kubernetes rendered/manifests.yaml \
+                    --format sarif > msval-report.sarif
+            '''
+            archiveArtifacts artifacts: 'msval-report.json,msval-report.sarif', allowEmptyArchive: true
+        }
+    }
+}

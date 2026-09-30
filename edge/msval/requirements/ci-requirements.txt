@@ -1,0 +1,11 @@
+# Pinned CI environment for msval MVP-1 (Phase H).
+#
+# Python version is pinned in the CI examples:
+#   - .github/workflows/msval.yml   (actions/setup-python, python-version)
+#   - ci/Jenkinsfile.example        (PYTHON_VERSION environment variable)
+#
+# msval itself is installed from the repository checkout:
+#   pip install ./edge/msval
+PyYAML==6.0.3
+jsonschema==4.26.0
+pytest==9.1.1

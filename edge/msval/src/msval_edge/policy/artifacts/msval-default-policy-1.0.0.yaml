@@ -1,0 +1,205 @@
+apiVersion: msval.policy/v1
+kind: PolicyBundle
+metadata:
+  name: msval-default-policy
+  version: 1.0.0
+integrity:
+  algorithm: sha256
+  rules_digest: sha256:033ac69277e702bf9edcadecb64b4daab8eaffccd96e7cc56a07954217ab134c
+spec:
+  evaluator: python-rules
+  layers:
+    edge: 0
+    application: 1
+    domain: 2
+    integration: 3
+    data: 4
+  dependency_direction: same-or-deeper
+  rules:
+  - id: ARCH-001
+    category: architecture-contract
+    severity: BLOCK
+    title: '[Alias] Service owner must be declared'
+    description: Legacy alias. Service owner declaration is verified as part of the
+      architecture contract validation (ARCH-CONTRACT), which reports 'service.owner
+      is required'.
+    remediation: Set service.owner to the responsible team in service.arch.yaml.
+    documentation_url: https://github.com/jessiebdavid/microservice-deployment-monitor-v2/blob/main/edge/msval/README.md#servicearchyaml-format
+  - id: ARCH-002
+    category: architecture-contract
+    severity: BLOCK
+    title: '[Alias] Service layer must be declared'
+    description: Legacy alias. Service layer declaration is verified as part of the
+      architecture contract validation (ARCH-CONTRACT), which reports 'service.layer
+      is required'.
+    remediation: Set service.layer to the appropriate architecture layer in service.arch.yaml.
+    documentation_url: https://github.com/jessiebdavid/microservice-deployment-monitor-v2/blob/main/edge/msval/README.md#servicearchyaml-format
+  - id: ARCH-003
+    category: architecture-contract
+    severity: WARN
+    title: '[Alias] Availability requirements must be declared'
+    description: Legacy alias. Availability declaration is enforced structurally by
+      the architecture contract validation (ARCH-CONTRACT), which requires availability.replicas
+      and availability.requires_health_checks.
+    remediation: Define availability.replicas and health-check requirements in service.arch.yaml.
+    documentation_url: https://github.com/jessiebdavid/microservice-deployment-monitor-v2/blob/main/edge/msval/README.md#servicearchyaml-format
+  - id: ARCH-CONTRACT
+    category: architecture-contract
+    severity: BLOCK
+    title: Service architecture contract is invalid
+    description: 'service.arch.yaml violates the MVP-1 contract schema: required fields
+      are missing or have invalid types. The rendered Kubernetes objects cannot be
+      trusted to reflect a valid architecture declaration.'
+    remediation: Fix the contract errors reported by msval validate so that service.arch.yaml
+      satisfies the documented schema.
+    documentation_url: https://github.com/jessiebdavid/microservice-deployment-monitor-v2/blob/main/edge/msval/README.md#servicearchyaml-format
+  - id: ARCH-004
+    category: architecture-consistency
+    severity: BLOCK
+    title: Deployment name must match the declared service name
+    description: 'Every Deployment rendered for this contract must belong to the service
+      declared in service.arch.yaml: its name must be the service name or use the
+      ''<service>-<role>'' convention (for example payments-api-worker). A mismatch
+      means the rendered manifests belong to a different service or the architecture
+      contract is stale.'
+    remediation: Make service.name and the Deployment metadata.name refer to the same
+      service.
+    documentation_url: https://github.com/jessiebdavid/microservice-deployment-monitor-v2/blob/main/edge/msval/README.md#rule-catalog
+  - id: ARCH-005
+    category: architecture-consistency
+    severity: BLOCK
+    title: Deployment owner must match the declared service owner
+    description: The owner label on the Deployment must match service.owner in service.arch.yaml.
+      Mismatched ownership breaks accountability and routing of validation findings.
+    remediation: Make service.owner and metadata.labels.owner refer to the same owning
+      team.
+    documentation_url: https://github.com/jessiebdavid/microservice-deployment-monitor-v2/blob/main/edge/msval/README.md#rule-catalog
+  - id: ARCH-006
+    category: architecture-consistency
+    severity: BLOCK
+    title: Deployment tier must match the declared service tier
+    description: The tier label on the Deployment must match service.tier in service.arch.yaml.
+      A mismatch misclassifies the criticality of the workload.
+    remediation: Make service.tier and metadata.labels.tier refer to the same service
+      classification.
+    documentation_url: https://github.com/jessiebdavid/microservice-deployment-monitor-v2/blob/main/edge/msval/README.md#rule-catalog
+  - id: ARCH-007
+    category: architecture-consistency
+    severity: BLOCK
+    title: Deployment replicas must match the declared availability
+    description: spec.replicas on the Deployment must match availability.replicas
+      in service.arch.yaml. A mismatch means the deployed availability does not meet
+      the declared requirements.
+    remediation: Make availability.replicas and spec.replicas consistent.
+    documentation_url: https://github.com/jessiebdavid/microservice-deployment-monitor-v2/blob/main/edge/msval/README.md#rule-catalog
+  - id: DEP-001
+    category: architecture-dependency
+    severity: BLOCK
+    title: Dependency target must be a valid declared architecture target
+    description: 'Each dependency declared in service.arch.yaml must target a concrete,
+      unambiguous service: the dependency name must be a non-empty string, must not
+      be the service itself, must not be declared twice, and its layer must be one
+      of the architecture layers pinned in the policy artifact.'
+    remediation: 'Fix the dependency entry: give it a non-empty target name, a valid
+      architecture layer, remove duplicates, and never depend on the service itself.'
+    documentation_url: https://github.com/jessiebdavid/microservice-deployment-monitor-v2/blob/main/edge/msval/README.md#rule-catalog
+  - id: DEP-002
+    category: architecture-dependency
+    severity: BLOCK
+    title: Dependency direction must follow the architecture layer model
+    description: Dependencies must point downward through the architecture layers.
+      The pinned layer ranking is edge (0), application (1), domain (2), integration
+      (3), data (4). A service may only depend on services in the same or a deeper
+      layer; depending on a higher layer creates an upward (circular by construction)
+      dependency.
+    remediation: Move the dependency target to the same or a deeper layer, or reposition
+      the service in the architecture.
+    documentation_url: https://github.com/jessiebdavid/microservice-deployment-monitor-v2/blob/main/edge/msval/README.md#rule-catalog
+  - id: EXP-001
+    category: exposure
+    severity: BLOCK
+    title: Public service must be exposed through an approved edge
+    description: 'A service declared as exposure.public=true must be reachable through
+      an approved public edge: an Ingress routing to it or a Service of type LoadBalancer/NodePort
+      targeting it. This rule is evaluated when rendered Kubernetes input is provided.'
+    remediation: Add an Ingress (or LoadBalancer/NodePort Service) that routes to
+      the service, or correct exposure.public in service.arch.yaml.
+    documentation_url: https://github.com/jessiebdavid/microservice-deployment-monitor-v2/blob/main/edge/msval/README.md#rule-catalog
+  - id: EXP-002
+    category: exposure
+    severity: BLOCK
+    title: Non-public service must not be publicly exposed
+    description: A service declared as exposure.public=false must not be reachable
+      through a public edge. An Ingress routing to it, or a Service of type LoadBalancer/NodePort
+      targeting it, contradicts the declared exposure. This rule is evaluated when
+      rendered Kubernetes input is provided.
+    remediation: Remove the Ingress or change the Service type to ClusterIP, or correct
+      exposure.public in service.arch.yaml if public exposure is intended and approved.
+    documentation_url: https://github.com/jessiebdavid/microservice-deployment-monitor-v2/blob/main/edge/msval/README.md#rule-catalog
+  - id: K8S-001
+    category: kubernetes
+    severity: BLOCK
+    title: Container image must be pinned by tag or digest
+    description: Every container must declare an image reference that contains an
+      explicit tag or digest. Floating or missing tags make deployments non-reproducible.
+    remediation: Set an explicit image reference, e.g. registry/app:1.4.2 or registry/app@sha256:....
+    documentation_url: https://kubernetes.io/docs/concepts/containers/images/
+  - id: K8S-002
+    category: kubernetes
+    severity: BLOCK
+    title: Container must define readiness and liveness probes
+    description: Every container must define both a readinessProbe and a livenessProbe
+      so that traffic is only routed to healthy instances and crashed instances are
+      restarted.
+    remediation: Configure readinessProbe and livenessProbe on the container.
+    documentation_url: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+  - id: K8S-003
+    category: kubernetes
+    severity: WARN
+    title: Container should configure graceful shutdown
+    description: The container has no lifecycle configuration. When a service needs
+      to drain in-flight requests on termination, a preStop hook and matching terminationGracePeriodSeconds
+      are required.
+    remediation: Configure a preStop lifecycle hook when graceful shutdown requires
+      it.
+    documentation_url: https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/
+  - id: K8S-004
+    category: kubernetes
+    severity: BLOCK
+    title: Container must declare CPU and memory requests
+    description: Every container must declare resources.requests.cpu and resources.requests.memory
+      so the scheduler can place the pod on a node with sufficient capacity.
+    remediation: Add resources.requests.cpu and resources.requests.memory to the container.
+    documentation_url: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+  - id: K8S-005
+    category: kubernetes
+    severity: BLOCK
+    title: Container must declare CPU and memory limits
+    description: Every container must declare resources.limits.cpu and resources.limits.memory
+      so a misbehaving container cannot consume unbounded node resources.
+    remediation: Add resources.limits.cpu and resources.limits.memory to the container.
+    documentation_url: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+  - id: K8S-006
+    category: kubernetes
+    severity: BLOCK
+    title: Container must run as a non-root user
+    description: Containers must set securityContext.runAsNonRoot to true. Running
+      as root inside the container increases the impact of any container escape.
+    remediation: Set securityContext.runAsNonRoot to true (pod or container level).
+    documentation_url: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+  - id: K8S-007
+    category: kubernetes
+    severity: BLOCK
+    title: Deployment must declare an owner
+    description: Every Deployment must carry an owner label so validation findings
+      and operational alerts can be routed to a responsible team.
+    remediation: Add the owner label to the Deployment metadata.
+    documentation_url: https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
+  - id: K8S-008
+    category: kubernetes
+    severity: WARN
+    title: Deployment should declare a service tier
+    description: Every Deployment should carry a tier label so routing, alerting and
+      validation policies can be tuned per criticality.
+    remediation: Add the tier label to the Deployment metadata.
+    documentation_url: https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
